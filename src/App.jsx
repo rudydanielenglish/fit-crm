@@ -152,7 +152,7 @@ export default function CRM() {
                 </div>
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
                   {col.map(lead=>(
-                    <div key={lead.id} className="c" onClick={()=>abrir(lead)} style={{background:"#fff",border:"1px solid #E8ECF0",borderRadius:10,padding:"12px 14px",cursor:"pointer",borderLeft:`3px solid ${QUAL[lead.qualificacao]?.color||"#E8ECF0"}`,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",transition:"all .15s"}}
+                    <div key={lead.id} className="c" draggable onDragStart={e=>{e.dataTransfer.setData("id",lead.id);e.dataTransfer.setData("status",lead.status);e.currentTarget.style.opacity="0.4"}} onDragEnd={e=>e.currentTarget.style.opacity="1"} onClick={()=>abrir(lead)} style={{background:"#fff",border:"1px solid #E8ECF0",borderRadius:10,padding:"12px 14px",cursor:"pointer",borderLeft:`3px solid ${QUAL[lead.qualificacao]?.color||"#E8ECF0"}`,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",transition:"all .15s"}}
                       onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.08)";e.currentTarget.style.borderColor="#D1D9E0";}}
                       onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";e.currentTarget.style.borderColor="#E8ECF0";}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:5}}>
