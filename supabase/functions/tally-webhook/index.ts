@@ -18,13 +18,23 @@ function detectarPais(whatsapp: string): string {
   return "outro";
 }
 
-function extrairResposta(fields: any[], label: string): string {
-  const field = fields.find((f: any) => f.label?.toLowerCase().includes(label.toLowerCase()));
+function extrairValor(field: any): string {
   if (!field) return "";
   const val = field.value;
-  if (Array.isArray(val)) return val.join(", ");
+  if (typeof val === "string") return val;
   if (typeof val === "boolean") return val ? "true" : "false";
+  if (Array.isArray(val) && field.options) {
+    return val.map((id: string) => {
+      const opt = field.options.find((o: any) => o.id === id);
+      return opt?.text || id;
+    }).join(", ");
+  }
+  if (Array.isArray(val)) return val.join(", ");
   return val?.toString() || "";
+}
+
+function encontrarCampo(fields: any[], label: string): any {
+  return fields.find((f: any) => f.label?.toLowerCase().includes(label.toLowerCase()));
 }
 
 function calcularQualificacao(dados: any): { score: number; qualificacao: string } {
@@ -48,46 +58,48 @@ serve(async (req: Request) => {
   try {
     const body = await req.json();
     const fields = body?.data?.fields || [];
-    const whatsapp = extrairResposta(fields, "WhatsApp");
-    const inicio_imediato = extrairResposta(fields, "início imediato")?.toLowerCase() === "sim";
-    const objetivo_raw = extrairResposta(fields, "profissional ou viagem")?.toLowerCase();
-    const objetivo = objetivo_raw?.includes("profissional") ? "profissional" : "viagem";
-    const ja_investiu_raw = extrairResposta(fields, "já investiu")?.toLowerCase();
-    const ja_investiu = ja_investiu_raw?.includes("já investi");
-    const disposto_raw = extrairResposta(fields, "disposto a investir")?.toLowerCase();
-    const disposto_investir = disposto_raw?.includes("pronto") ? "sim" : disposto_raw?.includes("talvez") ? "talvez" : "nao";
-    const nivel_raw = extrairResposta(fields, "nível de inglês");
+
+    const whatsapp = extrairValor(encontrarCampo(fields, "WhatsApp"));
+    const inicio_raw = extrairValor(encontrarCampo(fields, "início imediato")).toLowerCase();
+    const inicio_imediato = inicio_raw === "sim";
+    const objetivo_raw = extrairValor(encontrarCampo(fields, "profissional ou viagem")).toLowerCase();
+    const objetivo = objetivo_raw.includes("profissional") ? "profissional" : "viagem";
+    const ja_investiu_raw = extrairValor(encontrarCampo(fields, "já investiu")).toLowerCase();
+    const ja_investiu = ja_investiu_raw.includes("já investi");
+    const disposto_raw = extrairValor(encontrarCampo(fields, "disposto a investir")).toLowerCase();
+    const disposto_investir = disposto_raw.includes("pronto") ? "sim" : disposto_raw.includes("talvez") ? "talvez" : "nao";
+    const nivel_raw = extrairValor(encontrarCampo(fields, "nível de inglês"));
     const nivel = NIVEL_MAP[nivel_raw] || "nivel_1";
-    const decisor_raw = extrairResposta(fields, "decisão financeira")?.toLowerCase();
+    const decisor_raw = extrairValor(encontrarCampo(fields, "decisão financeira")).toLowerCase();
     const decisor_unico = decisor_raw === "sim";
 
     const { score, qualificacao } = calcularQualificacao({ objetivo, disposto_investir, ja_investiu, decisor_unico, whatsapp, nivel });
 
     const lead = {
-      nome: extrairResposta(fields, "nome e sobrenome") || "Sem nome",
+      nome: extrairValor(encontrarCampo(fields, "nome e sobrenome")) || "Sem nome",
       whatsapp,
-      instagram: extrairResposta(fields, "Instagram"),
+      instagram: extrairValor(encontrarCampo(fields, "Instagram")),
       inicio_imediato,
       objetivo,
-      chamou_atencao: extrairResposta(fields, "chamou sua atenção"),
-      bloqueio: extrairResposta(fields, "maior bloqueio"),
-      profissao: extrairResposta(fields, "profissão"),
-      motivo_aprender: extrairResposta(fields, "importante pra você agora"),
-      o_que_mudaria: extrairResposta(fields, "mudaria na sua vida"),
-      treino_diario: extrairResposta(fields, "15 minutos")?.toLowerCase() === "sim",
+      chamou_atencao: extrairValor(encontrarCampo(fields, "chamou sua atenção")),
+      bloqueio: extrairValor(encontrarCampo(fields, "maior bloqueio")),
+      profissao: extrairValor(encontrarCampo(fields, "profissão")),
+      motivo_aprender: extrairValor(encontrarCampo(fields, "importante pra você agora")),
+      o_que_mudaria: extrairValor(encontrarCampo(fields, "mudaria na sua vida")),
+      treino_diario: extrairValor(encontrarCampo(fields, "15 minutos")).toLowerCase() === "sim",
       ja_investiu,
       disposto_investir,
       nivel,
-      dias_disponiveis: [extrairResposta(fields, "dias você pode")].filter(Boolean),
-      horarios_disponiveis: [extrairResposta(fields, "horários você pode")].filter(Boolean),
-      so_para_voce: extrairResposta(fields, "só para você")?.toLowerCase() === "sim",
-      decisor_financeiro: decisor_raw || "",
-      info_adicional: extrairResposta(fields, "mais alguma coisa"),
+      dias_disponiveis: [extrairValor(encontrarCampo(fields, "dias você pode"))].filter(Boolean),
+      horarios_disponiveis: [extrairValor(encontrarCampo(fields, "horários você pode"))].filter(Boolean),
+      so_para_voce: extrairValor(encontrarCampo(fields, "só para você")).toLowerCase() === "sim",
+      decisor_financeiro: decisor_raw,
+      info_adicional: extrairValor(encontrarCampo(fields, "mais alguma coisa")),
       pais: detectarPais(whatsapp),
       score,
       qualificacao,
       status: inicio_imediato ? "novo" : "arquivado",
-      submitted_at: body?.createdAt || new Date().toISOString(),
+      submitted_at: body?.data?.createdAt || new Date().toISOString(),
     };
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -106,12 +118,15 @@ serve(async (req: Request) => {
 
     if (!res.ok) {
       const err = await res.text();
+      console.error("Erro ao salvar:", err);
       return new Response(JSON.stringify({ error: err }), { status: 500 });
     }
 
     const saved = await res.json();
-    return new Response(JSON.stringify({ ok: true, id: saved[0]?.id }), { status: 200, headers: { "Content-Type": "application/json" } });
+    console.log("Lead salvo:", saved[0]?.id);
+    return new Response(JSON.stringify({ ok: true, id: saved[0]?.id }), { status: 200 });
   } catch (e: any) {
+    console.error("Erro:", e.message);
     return new Response(JSON.stringify({ error: e.message }), { status: 500 });
   }
 });
